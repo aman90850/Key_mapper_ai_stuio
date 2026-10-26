@@ -23,6 +23,9 @@ class InputDetector(private val context: Context) : InputManager.InputDeviceList
     private val _activeDevice = MutableStateFlow<HardwareDevice?>(null)
     val activeDevice = _activeDevice.asStateFlow()
 
+    private var lastHatX: Float = 0f
+    private var lastHatY: Float = 0f
+
     fun startListening() {
         try {
             inputManager?.registerInputDeviceListener(this, null)
@@ -222,10 +225,24 @@ class InputDetector(private val context: Context) : InputManager.InputDeviceList
 
                 val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
                 val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
-                if (hatX == -1.0f) InputEventBus.onKeyDown("D-PAD LEFT", KeyEvent.KEYCODE_DPAD_LEFT, true)
-                else if (hatX == 1.0f) InputEventBus.onKeyDown("D-PAD RIGHT", KeyEvent.KEYCODE_DPAD_RIGHT, true)
-                if (hatY == -1.0f) InputEventBus.onKeyDown("D-PAD UP", KeyEvent.KEYCODE_DPAD_UP, true)
-                else if (hatY == 1.0f) InputEventBus.onKeyDown("D-PAD DOWN", KeyEvent.KEYCODE_DPAD_DOWN, true)
+
+                if (hatX != lastHatX) {
+                    if (lastHatX == -1.0f) InputEventBus.onKeyUp("D-PAD LEFT", KeyEvent.KEYCODE_DPAD_LEFT, true)
+                    else if (lastHatX == 1.0f) InputEventBus.onKeyUp("D-PAD RIGHT", KeyEvent.KEYCODE_DPAD_RIGHT, true)
+
+                    if (hatX == -1.0f) InputEventBus.onKeyDown("D-PAD LEFT", KeyEvent.KEYCODE_DPAD_LEFT, true)
+                    else if (hatX == 1.0f) InputEventBus.onKeyDown("D-PAD RIGHT", KeyEvent.KEYCODE_DPAD_RIGHT, true)
+                    lastHatX = hatX
+                }
+
+                if (hatY != lastHatY) {
+                    if (lastHatY == -1.0f) InputEventBus.onKeyUp("D-PAD UP", KeyEvent.KEYCODE_DPAD_UP, true)
+                    else if (lastHatY == 1.0f) InputEventBus.onKeyUp("D-PAD DOWN", KeyEvent.KEYCODE_DPAD_DOWN, true)
+
+                    if (hatY == -1.0f) InputEventBus.onKeyDown("D-PAD UP", KeyEvent.KEYCODE_DPAD_UP, true)
+                    else if (hatY == 1.0f) InputEventBus.onKeyDown("D-PAD DOWN", KeyEvent.KEYCODE_DPAD_DOWN, true)
+                    lastHatY = hatY
+                }
 
                 true
             } else {

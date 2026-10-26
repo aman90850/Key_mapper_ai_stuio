@@ -19,5 +19,6 @@ data class MappingNode(
     val macroSecondX: Float = 0.55f,
     val macroSecondY: Float = 0.55f,
     val macroDelayMs: Long = 120L,
-    val turboRateHz: Int = 12
+    val turboRateHz: Int = 12,
+    val situation: String = "ALL"
 )

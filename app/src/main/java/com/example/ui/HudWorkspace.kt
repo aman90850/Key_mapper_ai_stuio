@@ -18,16 +18,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AirlineSeatLegroomExtra
+import androidx.compose.material.icons.filled.AirlineSeatReclineExtra
 import androidx.compose.material.icons.filled.AirlineSeatReclineNormal
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -366,11 +377,23 @@ private fun StandardButtonNodeContent(
                 NodeType.SCOPE -> Icons.Default.CenterFocusStrong
                 NodeType.CROUCH -> Icons.Default.AirlineSeatReclineNormal
                 NodeType.PRONE -> Icons.Default.AirlineSeatLegroomExtra
-                NodeType.JUMP -> Icons.Default.DirectionsRun
+                NodeType.JUMP -> Icons.AutoMirrored.Filled.DirectionsRun
                 NodeType.RELOAD -> Icons.Default.Refresh
                 NodeType.PEEK_LEFT, NodeType.PEEK_RIGHT -> Icons.Default.Visibility
                 NodeType.COMBO_MACRO -> Icons.Default.Bolt
                 NodeType.RAPID_FIRE -> Icons.Default.TouchApp
+                NodeType.VEHICLE_ACCEL -> Icons.Default.ArrowUpward
+                NodeType.VEHICLE_REVERSE -> Icons.Default.ArrowDownward
+                NodeType.VEHICLE_STEER_LEFT -> Icons.AutoMirrored.Filled.ArrowBack
+                NodeType.VEHICLE_STEER_RIGHT -> Icons.AutoMirrored.Filled.ArrowForward
+                NodeType.VEHICLE_BRAKE -> Icons.Default.PanTool
+                NodeType.VEHICLE_BOOST -> Icons.Default.Speed
+                NodeType.VEHICLE_EXIT -> Icons.AutoMirrored.Filled.ExitToApp
+                NodeType.VEHICLE_HORN -> Icons.Default.VolumeUp
+                NodeType.VEHICLE_CHANGE_SEAT -> Icons.Default.AirlineSeatReclineExtra
+                NodeType.VEHICLE_LEAN_DOWN -> Icons.Default.ArrowDownward
+                NodeType.VEHICLE_LEAN_UP -> Icons.Default.ArrowUpward
+                NodeType.ENTER_VEHICLE -> Icons.Default.DirectionsCar
                 else -> null
             }
 

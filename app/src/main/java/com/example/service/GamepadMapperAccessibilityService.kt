@@ -19,6 +19,7 @@ import com.example.input.InputEventBus
 import com.example.model.ActionMode
 import com.example.model.MappingNode
 import com.example.model.NodeType
+import com.example.model.PlayerSituation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
+import kotlin.math.hypot
 
 class GamepadMapperAccessibilityService : AccessibilityService() {
 
@@ -42,7 +44,24 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
 
     // Throttle timestamps for analog stick camera/movement to keep gestures responsive without freezing
     private var lastAimSwipeTime = 0L
-    private var lastMoveSwipeTime = 0L
+
+    // Continuous Movement Engine State
+    private var currentMovementStroke: GestureDescription.StrokeDescription? = null
+    private var lastMovementTargetX = 0f
+    private var lastMovementTargetY = 0f
+    private var isMovementGestureInFlight = false
+    private var isMovementLoopActive = false
+
+    private val movementTickRunnable = object : Runnable {
+        override fun run() {
+            val shouldContinue = processMovementTick()
+            if (shouldContinue || currentMovementStroke != null) {
+                mainHandler.postDelayed(this, 40L)
+            } else {
+                isMovementLoopActive = false
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "GamepadAccessibility"
@@ -119,49 +138,239 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         profileRepository = ProfileRepository(this)
-        Log.d(TAG, "GamepadMapperAccessibilityService connected for PUBG optimization")
+        Log.d(TAG, "GamepadMapperAccessibilityService connected for PUBG continuous movement")
 
-        startAnalogStickMonitoring()
+        startInputMonitoring()
     }
 
-    private fun startAnalogStickMonitoring() {
-        // Continuous monitoring of Right Stick (Camera Look/Aim) and Left Stick (Movement)
+    private fun startInputMonitoring() {
+        // Continuous monitoring of Right Stick (Camera Aim), Left Stick (Movement), and Triggers
         serviceScope.launch {
             InputEventBus.analogState.collectLatest { state ->
                 val rx = state.rx
                 val ry = state.ry
-                val lx = state.lx
-                val ly = state.ly
                 val now = SystemClock.uptimeMillis()
 
-                // PUBG Right Stick Camera Aiming (Threshold > 0.12f, throttled to 50ms)
-                if ((abs(rx) > 0.12f || abs(ry) > 0.12f) && (now - lastAimSwipeTime > 50L)) {
+                // PUBG Right Stick Camera Aiming (Smooth swiping throttled to 40ms)
+                if ((abs(rx) > 0.08f || abs(ry) > 0.08f) && (now - lastAimSwipeTime > 40L)) {
                     lastAimSwipeTime = now
                     val (screenW, screenH) = getRealScreenBounds()
-                    // Center of PUBG Right Camera Look Area
-                    val cameraCenterX = screenW * 0.75f
-                    val cameraCenterY = screenH * 0.55f
+                    val activeProfile = profileRepository.getActiveProfile()
+                    val lookNode = activeProfile.nodes.firstOrNull {
+                        it.nodeType == NodeType.JOYSTICK_RIGHT || it.label.contains("LOOK", ignoreCase = true)
+                    }
 
-                    val swipeDist = 70f
+                    val cameraCenterX = if (lookNode != null) (lookNode.xPercent * screenW) else (screenW * 0.76f)
+                    val cameraCenterY = if (lookNode != null) (lookNode.yPercent * screenH) else (screenH * 0.58f)
+
+                    val swipeDist = 75f
                     val endX = (cameraCenterX + (rx * swipeDist)).coerceIn(10f, screenW - 10f)
                     val endY = (cameraCenterY + (ry * swipeDist)).coerceIn(10f, screenH - 10f)
-                    dispatchSwipe(cameraCenterX, cameraCenterY, endX, endY, 45L)
+                    dispatchSwipe(cameraCenterX, cameraCenterY, endX, endY, 35L)
                 }
 
-                // PUBG Left Stick Movement (WASD simulation, throttled to 60ms)
-                if ((abs(lx) > 0.15f || abs(ly) > 0.15f) && (now - lastMoveSwipeTime > 60L)) {
-                    lastMoveSwipeTime = now
-                    val (screenW, screenH) = getRealScreenBounds()
-                    // Center of PUBG Movement Joystick
-                    val joyCenterX = screenW * 0.18f
-                    val joyCenterY = screenH * 0.68f
+                // Check Left Stick or trigger changes to wake up continuous movement engine
+                if (abs(state.lx) > 0.12f || abs(state.ly) > 0.12f) {
+                    wakeMovementEngine()
+                }
 
-                    val moveDist = 65f
-                    val endX = (joyCenterX + (lx * moveDist)).coerceIn(10f, screenW - 10f)
-                    val endY = (joyCenterY + (ly * moveDist)).coerceIn(10f, screenH - 10f)
-                    dispatchSwipe(joyCenterX, joyCenterY, endX, endY, 50L)
+                // Analog Trigger RT (Fire) support for gamepads
+                if (state.rt > 0.35f) {
+                    if (pressedKeyNames.add("RT")) {
+                        handleKeyInitialPress("RT")
+                    }
+                } else if (state.rt < 0.20f) {
+                    if (pressedKeyNames.remove("RT")) {
+                        handleKeyRelease("RT")
+                    }
+                }
+
+                // Analog Trigger LT (Scope) support for gamepads
+                if (state.lt > 0.35f) {
+                    if (pressedKeyNames.add("LT")) {
+                        handleKeyInitialPress("LT")
+                    }
+                } else if (state.lt < 0.20f) {
+                    if (pressedKeyNames.remove("LT")) {
+                        handleKeyRelease("LT")
+                    }
                 }
             }
+        }
+    }
+
+    private fun wakeMovementEngine() {
+        if (!isMovementLoopActive) {
+            isMovementLoopActive = true
+            mainHandler.post(movementTickRunnable)
+        }
+    }
+
+    /**
+     * PUBG Genuine Movement Engine:
+     * Maintains a continuous virtual thumb contact on the in-game movement joystick using
+     * Android's willContinue and continueStroke APIs. The thumb stays down without lifting
+     * every 50ms, eliminating all stutter and giving authentic, smooth character movement!
+     */
+    private fun processMovementTick(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+
+        val (screenW, screenH) = getRealScreenBounds()
+        val analog = InputEventBus.analogState.value
+        val stickX = analog.lx
+        val stickY = analog.ly
+
+        // Keyboard WASD & D-PAD input detection
+        var kbX = 0f
+        var kbY = 0f
+        if (pressedKeyNames.contains("W") || pressedKeyNames.contains("D-PAD UP")) kbY -= 1f
+        if (pressedKeyNames.contains("S") || pressedKeyNames.contains("D-PAD DOWN")) kbY += 1f
+        if (pressedKeyNames.contains("A") || pressedKeyNames.contains("D-PAD LEFT")) kbX -= 1f
+        if (pressedKeyNames.contains("D") || pressedKeyNames.contains("D-PAD RIGHT")) kbX += 1f
+
+        if (kbX != 0f && kbY != 0f) {
+            val diagonalFactor = 0.7071f
+            kbX *= diagonalFactor
+            kbY *= diagonalFactor
+        }
+
+        // Determine final movement vector
+        val moveX: Float
+        val moveY: Float
+        if (abs(stickX) > 0.12f || abs(stickY) > 0.12f) {
+            moveX = stickX
+            moveY = stickY
+        } else {
+            moveX = kbX
+            moveY = kbY
+        }
+
+        val magnitude = hypot(moveX, moveY)
+        val isMoving = magnitude > 0.12f
+
+        // Detect sprint request (SHIFT key, L3 button, or stick pushed far forward)
+        val isSprinting = pressedKeyNames.contains("SHIFT") ||
+                pressedKeyNames.contains("L3") ||
+                pressedKeyNames.contains("SPRINT") ||
+                moveY < -0.80f
+
+        // Find the user's on-screen PUBG joystick placement from the active profile
+        val activeProfile = profileRepository.getActiveProfile()
+        val moveNode = activeProfile.nodes.firstOrNull {
+            it.nodeType == NodeType.JOYSTICK_LEFT ||
+                    it.label.contains("MOVE", ignoreCase = true) ||
+                    it.label.contains("WASD", ignoreCase = true)
+        }
+
+        val joyCenterX = if (moveNode != null) (moveNode.xPercent * screenW).coerceIn(20f, screenW - 20f) else (screenW * 0.18f)
+        val joyCenterY = if (moveNode != null) (moveNode.yPercent * screenH).coerceIn(20f, screenH - 20f) else (screenH * 0.68f)
+
+        val baseRadius = if (moveNode != null && moveNode.radiusDp > 20f) {
+            moveNode.radiusDp * 1.6f
+        } else {
+            80f
+        }
+
+        if (isMoving) {
+            val dragDist = if (isSprinting) {
+                // Pulls thumb higher into PUBG's top sprint-lock zone
+                baseRadius * 1.55f
+            } else {
+                baseRadius * magnitude.coerceIn(0.6f, 1.0f)
+            }
+
+            val targetX = (joyCenterX + (moveX / magnitude.coerceAtLeast(1f)) * dragDist).coerceIn(10f, screenW - 10f)
+            val targetY = (joyCenterY + (moveY / magnitude.coerceAtLeast(1f)) * dragDist).coerceIn(10f, screenH - 10f)
+
+            if (isMovementGestureInFlight) {
+                // A gesture is currently processing in the system; wait for callback
+                return true
+            }
+
+            if (currentMovementStroke == null) {
+                // Initial Touch: Place thumb down at joystick center and drag out to target
+                val path = Path().apply {
+                    moveTo(joyCenterX, joyCenterY)
+                    lineTo(targetX, targetY)
+                }
+                val stroke = GestureDescription.StrokeDescription(path, 0L, 45L, true)
+                val gesture = GestureDescription.Builder().addStroke(stroke).build()
+                currentMovementStroke = stroke
+                lastMovementTargetX = targetX
+                lastMovementTargetY = targetY
+                isMovementGestureInFlight = true
+
+                dispatchGesture(gesture, object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        isMovementGestureInFlight = false
+                    }
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        isMovementGestureInFlight = false
+                        currentMovementStroke = null
+                    }
+                }, null)
+            } else {
+                // Continuous Hold: Update thumb drag position without lifting finger
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val path = Path().apply {
+                        moveTo(lastMovementTargetX, lastMovementTargetY)
+                        lineTo(targetX, targetY)
+                    }
+                    try {
+                        val nextStroke = currentMovementStroke!!.continueStroke(path, 0L, 45L, true)
+                        val gesture = GestureDescription.Builder().addStroke(nextStroke).build()
+                        currentMovementStroke = nextStroke
+                        lastMovementTargetX = targetX
+                        lastMovementTargetY = targetY
+                        isMovementGestureInFlight = true
+
+                        dispatchGesture(gesture, object : GestureResultCallback() {
+                            override fun onCompleted(gestureDescription: GestureDescription?) {
+                                isMovementGestureInFlight = false
+                            }
+                            override fun onCancelled(gestureDescription: GestureDescription?) {
+                                isMovementGestureInFlight = false
+                                currentMovementStroke = null
+                            }
+                        }, null)
+                    } catch (e: Exception) {
+                        isMovementGestureInFlight = false
+                        currentMovementStroke = null
+                    }
+                }
+            }
+            return true
+        } else {
+            // Movement stopped: Cleanly lift the thumb so character stops immediately
+            if (currentMovementStroke != null && !isMovementGestureInFlight) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val path = Path().apply {
+                        moveTo(lastMovementTargetX, lastMovementTargetY)
+                        lineTo(lastMovementTargetX, lastMovementTargetY)
+                    }
+                    try {
+                        val endStroke = currentMovementStroke!!.continueStroke(path, 0L, 25L, false)
+                        val gesture = GestureDescription.Builder().addStroke(endStroke).build()
+                        isMovementGestureInFlight = true
+                        dispatchGesture(gesture, object : GestureResultCallback() {
+                            override fun onCompleted(gestureDescription: GestureDescription?) {
+                                isMovementGestureInFlight = false
+                                currentMovementStroke = null
+                            }
+                            override fun onCancelled(gestureDescription: GestureDescription?) {
+                                isMovementGestureInFlight = false
+                                currentMovementStroke = null
+                            }
+                        }, null)
+                    } catch (e: Exception) {
+                        isMovementGestureInFlight = false
+                        currentMovementStroke = null
+                    }
+                } else {
+                    currentMovementStroke = null
+                }
+            }
+            return false
         }
     }
 
@@ -169,11 +378,16 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.w(TAG, "Accessibility interrupted")
+        currentMovementStroke = null
+        isMovementGestureInFlight = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopAllSprays()
+        currentMovementStroke = null
+        isMovementGestureInFlight = false
+        mainHandler.removeCallbacks(movementTickRunnable)
         serviceScope.cancel()
         if (instance == this) {
             instance = null
@@ -206,9 +420,15 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
 
     private fun handleKeyInitialPress(keyName: String) {
         try {
+            // Wake movement engine if movement keys are pressed
+            if (keyName in setOf("W", "A", "S", "D", "SHIFT", "L3", "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT")) {
+                wakeMovementEngine()
+            }
+
             val activeProfile = profileRepository.getActiveProfile()
             val matchedNodes = activeProfile.nodes.filter {
-                it.boundInput.equals(keyName, ignoreCase = true)
+                it.boundInput.equals(keyName, ignoreCase = true) ||
+                        (it.boundInput.equals("WASD", ignoreCase = true) && keyName in setOf("W", "A", "S", "D"))
             }
 
             if (matchedNodes.isEmpty()) return
@@ -216,11 +436,17 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
             val (screenW, screenH) = getRealScreenBounds()
 
             for (node in matchedNodes) {
+                // If it's the joystick node, movement engine handles it continuously
+                if (node.nodeType == NodeType.JOYSTICK_LEFT) {
+                    wakeMovementEngine()
+                    continue
+                }
+
                 val targetX = (node.xPercent * screenW).coerceIn(10f, screenW - 10f)
                 val targetY = (node.yPercent * screenH).coerceIn(10f, screenH - 10f)
 
                 // 1. Continuous Auto-Fire for Guns in PUBG (Holding RT continues spraying)
-                if (node.nodeType == NodeType.FIRE || node.nodeType == NodeType.RAPID_FIRE || keyName.equals("RT", ignoreCase = true)) {
+                if (node.nodeType == NodeType.FIRE || node.nodeType == NodeType.RAPID_FIRE || keyName.equals("RT", ignoreCase = true) || node.label.contains("FIRE", ignoreCase = true)) {
                     startContinuousAutoSpray(keyName, targetX, targetY)
                 } else {
                     // Standard, Crouch, Prone, Scope, Jump, Peek, Reload, Medkit, Grenade, Guns
@@ -235,6 +461,11 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
     private fun handleKeyRelease(keyName: String) {
         // Stop any continuous fire loop for this key
         stopContinuousSpray(keyName)
+
+        // Wake movement engine to detect stopped key
+        if (keyName in setOf("W", "A", "S", "D", "SHIFT", "L3", "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT")) {
+            wakeMovementEngine()
+        }
 
         // Handle Hold-to-Scope & Hold-to-Peek release mechanics for PUBG
         try {
@@ -344,3 +575,4 @@ class GamepadMapperAccessibilityService : AccessibilityService() {
                 KeyEvent.isGamepadButton(event.keyCode)
     }
 }
+

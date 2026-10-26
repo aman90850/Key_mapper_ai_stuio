@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AirlineSeatLegroomExtra
 import androidx.compose.material.icons.filled.AirlineSeatReclineNormal
@@ -26,7 +27,6 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ControlCamera
-import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.PanTool
@@ -114,7 +114,7 @@ fun AddNodeMenu(
         ),
         NodeSpawnOption(
             type = NodeType.JUMP,
-            icon = Icons.Default.DirectionsRun,
+            icon = Icons.AutoMirrored.Filled.DirectionsRun,
             title = "Jump Button",
             subtitle = "Jump / Vault obstacle action",
             defaultKey = "A / Space",

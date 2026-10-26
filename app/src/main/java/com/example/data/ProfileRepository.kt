@@ -6,6 +6,10 @@ import com.example.model.ActionMode
 import com.example.model.MappingNode
 import com.example.model.NodeType
 import com.example.model.Profile
+import com.example.model.PlayerSituation
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -18,9 +22,41 @@ class ProfileRepository(context: Context) {
     companion object {
         private const val KEY_PROFILES_JSON = "key_profiles_json"
         private const val KEY_ACTIVE_PROFILE_ID = "key_active_profile_id"
+        private const val KEY_ACTIVE_SITUATION = "key_active_situation"
+
+        // Global shared situation flow for cross-service immediate reactivity
+        private val _globalSituation = MutableStateFlow(PlayerSituation.FOOT)
+        val globalSituation: StateFlow<PlayerSituation> = _globalSituation.asStateFlow()
+    }
+
+    val currentSituation: StateFlow<PlayerSituation> get() = _globalSituation
+
+    fun setSituation(situation: PlayerSituation) {
+        _globalSituation.value = situation
+        prefs.edit().putString(KEY_ACTIVE_SITUATION, situation.name).apply()
+    }
+
+    fun cycleSituation(): PlayerSituation {
+        val next = _globalSituation.value.next()
+        setSituation(next)
+        return next
+    }
+
+    fun toggleVehicleSituation(): PlayerSituation {
+        val current = _globalSituation.value
+        val next = if (current == PlayerSituation.FOOT) PlayerSituation.VEHICLE_CAR else PlayerSituation.FOOT
+        setSituation(next)
+        return next
     }
 
     init {
+        val savedSituation = prefs.getString(KEY_ACTIVE_SITUATION, PlayerSituation.FOOT.name)
+        val initialSituation = try {
+            PlayerSituation.valueOf(savedSituation ?: PlayerSituation.FOOT.name)
+        } catch (e: Exception) {
+            PlayerSituation.FOOT
+        }
+        _globalSituation.value = initialSituation
         if (!prefs.contains(KEY_PROFILES_JSON)) {
             val initialProfiles = listOf(
                 createShooterProProfile(),
@@ -168,6 +204,7 @@ class ProfileRepository(context: Context) {
             nObj.put("macroSecondY", node.macroSecondY.toDouble())
             nObj.put("macroDelayMs", node.macroDelayMs)
             nObj.put("turboRateHz", node.turboRateHz)
+            nObj.put("situation", node.situation)
             nodesArray.put(nObj)
         }
         obj.put("nodes", nodesArray)
@@ -215,7 +252,8 @@ class ProfileRepository(context: Context) {
                         macroSecondX = n.optDouble("macroSecondX", 0.55).toFloat(),
                         macroSecondY = n.optDouble("macroSecondY", 0.55).toFloat(),
                         macroDelayMs = n.optLong("macroDelayMs", 120L),
-                        turboRateHz = n.optInt("turboRateHz", 12)
+                        turboRateHz = n.optInt("turboRateHz", 12),
+                        situation = n.optString("situation", "ALL")
                     )
                 )
             }
@@ -239,6 +277,9 @@ class ProfileRepository(context: Context) {
             category = "Battle Royale / FPS",
             isDefault = true,
             nodes = listOf(
+                // ==========================================
+                // 1. FOOT / COMBAT SITUATION (Screenshot 3)
+                // ==========================================
                 MappingNode(
                     id = "node_move_stick",
                     nodeType = NodeType.JOYSTICK_LEFT,
@@ -248,7 +289,8 @@ class ProfileRepository(context: Context) {
                     yPercent = 0.68f,
                     radiusDp = 64f,
                     opacity = 0.80f,
-                    colorHex = "#00E5FF"
+                    colorHex = "#00E5FF",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_aim_stick",
@@ -259,77 +301,82 @@ class ProfileRepository(context: Context) {
                     yPercent = 0.58f,
                     radiusDp = 70f,
                     opacity = 0.70f,
-                    colorHex = "#448AFF"
+                    colorHex = "#448AFF",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_fire",
                     nodeType = NodeType.FIRE,
                     label = "FIRE",
                     boundInput = "RT",
-                    xPercent = 0.88f,
-                    yPercent = 0.35f,
-                    radiusDp = 44f,
+                    xPercent = 0.85f,
+                    yPercent = 0.745f,
+                    radiusDp = 46f,
                     opacity = 0.90f,
                     colorHex = "#FF5252",
-                    actionMode = ActionMode.NORMAL_TAP
+                    actionMode = ActionMode.NORMAL_TAP,
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_scope",
                     nodeType = NodeType.SCOPE,
                     label = "SCOPE",
                     boundInput = "LT",
-                    xPercent = 0.82f,
-                    yPercent = 0.18f,
+                    xPercent = 0.93f,
+                    yPercent = 0.52f,
                     radiusDp = 40f,
                     opacity = 0.85f,
                     colorHex = "#00E5FF",
-                    actionMode = ActionMode.HOLD
+                    actionMode = ActionMode.HOLD,
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_jump",
                     nodeType = NodeType.JUMP,
                     label = "JUMP",
                     boundInput = "A",
-                    xPercent = 0.92f,
-                    yPercent = 0.60f,
+                    xPercent = 0.93f,
+                    yPercent = 0.68f,
                     radiusDp = 38f,
                     opacity = 0.85f,
-                    colorHex = "#FFB300"
+                    colorHex = "#FFB300",
+                    situation = "FOOT"
                 ),
-                // SEPARATED CROUCH BUTTON
                 MappingNode(
                     id = "node_crouch",
                     nodeType = NodeType.CROUCH,
                     label = "CROUCH",
                     boundInput = "B",
-                    xPercent = 0.88f,
-                    yPercent = 0.75f,
+                    xPercent = 0.84f,
+                    yPercent = 0.92f,
                     radiusDp = 38f,
                     opacity = 0.85f,
-                    colorHex = "#26A69A"
+                    colorHex = "#26A69A",
+                    situation = "FOOT"
                 ),
-                // SEPARATED PRONE BUTTON
                 MappingNode(
                     id = "node_prone",
                     nodeType = NodeType.PRONE,
                     label = "PRONE",
                     boundInput = "R3",
-                    xPercent = 0.78f,
-                    yPercent = 0.86f,
+                    xPercent = 0.91f,
+                    yPercent = 0.92f,
                     radiusDp = 38f,
                     opacity = 0.85f,
-                    colorHex = "#AB47BC"
+                    colorHex = "#AB47BC",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_reload",
                     nodeType = NodeType.RELOAD,
                     label = "RELOAD",
                     boundInput = "X",
-                    xPercent = 0.72f,
-                    yPercent = 0.36f,
+                    xPercent = 0.77f,
+                    yPercent = 0.92f,
                     radiusDp = 36f,
                     opacity = 0.85f,
-                    colorHex = "#448AFF"
+                    colorHex = "#448AFF",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_peek_l",
@@ -341,7 +388,8 @@ class ProfileRepository(context: Context) {
                     radiusDp = 34f,
                     opacity = 0.80f,
                     colorHex = "#00E5FF",
-                    actionMode = ActionMode.HOLD
+                    actionMode = ActionMode.HOLD,
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_peek_r",
@@ -353,7 +401,8 @@ class ProfileRepository(context: Context) {
                     radiusDp = 34f,
                     opacity = 0.80f,
                     colorHex = "#00E5FF",
-                    actionMode = ActionMode.HOLD
+                    actionMode = ActionMode.HOLD,
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_sprint",
@@ -364,7 +413,8 @@ class ProfileRepository(context: Context) {
                     yPercent = 0.46f,
                     radiusDp = 34f,
                     opacity = 0.80f,
-                    colorHex = "#ECEFF1"
+                    colorHex = "#ECEFF1",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_gun1",
@@ -372,21 +422,23 @@ class ProfileRepository(context: Context) {
                     label = "GUN 1",
                     boundInput = "D-PAD UP",
                     xPercent = 0.44f,
-                    yPercent = 0.88f,
+                    yPercent = 0.90f,
                     radiusDp = 36f,
                     opacity = 0.80f,
-                    colorHex = "#00E5FF"
+                    colorHex = "#00E5FF",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_gun2",
                     nodeType = NodeType.STANDARD_TAP,
                     label = "GUN 2",
                     boundInput = "D-PAD RIGHT",
-                    xPercent = 0.56f,
-                    yPercent = 0.88f,
+                    xPercent = 0.55f,
+                    yPercent = 0.90f,
                     radiusDp = 36f,
                     opacity = 0.80f,
-                    colorHex = "#00E5FF"
+                    colorHex = "#00E5FF",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_heal",
@@ -394,43 +446,271 @@ class ProfileRepository(context: Context) {
                     label = "HEAL",
                     boundInput = "D-PAD DOWN",
                     xPercent = 0.34f,
-                    yPercent = 0.88f,
+                    yPercent = 0.91f,
                     radiusDp = 34f,
                     opacity = 0.80f,
-                    colorHex = "#00E676"
-                ),
-                MappingNode(
-                    id = "node_grenade",
-                    nodeType = NodeType.STANDARD_TAP,
-                    label = "GRENADE",
-                    boundInput = "D-PAD LEFT",
-                    xPercent = 0.66f,
-                    yPercent = 0.88f,
-                    radiusDp = 34f,
-                    opacity = 0.80f,
-                    colorHex = "#FF9100"
+                    colorHex = "#00E676",
+                    situation = "FOOT"
                 ),
                 MappingNode(
                     id = "node_backpack",
                     nodeType = NodeType.STANDARD_TAP,
                     label = "BAG",
                     boundInput = "SELECT",
-                    xPercent = 0.08f,
-                    yPercent = 0.88f,
+                    xPercent = 0.09f,
+                    yPercent = 0.90f,
                     radiusDp = 34f,
                     opacity = 0.80f,
-                    colorHex = "#90CAF9"
+                    colorHex = "#90CAF9",
+                    situation = "FOOT"
                 ),
                 MappingNode(
-                    id = "node_interact",
-                    nodeType = NodeType.STANDARD_TAP,
-                    label = "DOOR/REVIVE",
+                    id = "node_enter_vehicle",
+                    nodeType = NodeType.ENTER_VEHICLE,
+                    label = "DRIVE (Y)",
+                    boundInput = "Y",
+                    xPercent = 0.865f,
+                    yPercent = 0.450f,
+                    radiusDp = 40f,
+                    opacity = 0.85f,
+                    colorHex = "#FFD54F",
+                    situation = "FOOT"
+                ),
+
+                // ==========================================
+                // 2. CAR / BUGGY DRIVING SITUATION (Screenshot 1)
+                // ==========================================
+                MappingNode(
+                    id = "node_car_gas",
+                    nodeType = NodeType.VEHICLE_ACCEL,
+                    label = "GAS (RT / W)",
+                    boundInput = "RT",
+                    xPercent = 0.166f,
+                    yPercent = 0.535f,
+                    radiusDp = 46f,
+                    opacity = 0.85f,
+                    colorHex = "#00E676",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_rev",
+                    nodeType = NodeType.VEHICLE_REVERSE,
+                    label = "REV (LT / S)",
+                    boundInput = "LT",
+                    xPercent = 0.166f,
+                    yPercent = 0.765f,
+                    radiusDp = 46f,
+                    opacity = 0.85f,
+                    colorHex = "#FF5252",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_left",
+                    nodeType = NodeType.VEHICLE_STEER_LEFT,
+                    label = "LEFT (L-LEFT / A)",
+                    boundInput = "L-LEFT",
+                    xPercent = 0.704f,
+                    yPercent = 0.690f,
+                    radiusDp = 44f,
+                    opacity = 0.85f,
+                    colorHex = "#00E5FF",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_right",
+                    nodeType = NodeType.VEHICLE_STEER_RIGHT,
+                    label = "RIGHT (L-RIGHT / D)",
+                    boundInput = "L-RIGHT",
+                    xPercent = 0.835f,
+                    yPercent = 0.690f,
+                    radiusDp = 44f,
+                    opacity = 0.85f,
+                    colorHex = "#00E5FF",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_boost",
+                    nodeType = NodeType.VEHICLE_BOOST,
+                    label = "NITRO (A / SHIFT)",
+                    boundInput = "A",
+                    xPercent = 0.104f,
+                    yPercent = 0.410f,
+                    radiusDp = 38f,
+                    opacity = 0.85f,
+                    colorHex = "#FFB300",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_brake",
+                    nodeType = NodeType.VEHICLE_BRAKE,
+                    label = "BRAKE (B / SPACE)",
+                    boundInput = "B",
+                    xPercent = 0.088f,
+                    yPercent = 0.665f,
+                    radiusDp = 38f,
+                    opacity = 0.85f,
+                    colorHex = "#FF1744",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_exit",
+                    nodeType = NodeType.VEHICLE_EXIT,
+                    label = "EXIT (Y / F)",
+                    boundInput = "Y",
+                    xPercent = 0.865f,
+                    yPercent = 0.450f,
+                    radiusDp = 40f,
+                    opacity = 0.90f,
+                    colorHex = "#FFD54F",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_horn",
+                    nodeType = NodeType.VEHICLE_HORN,
+                    label = "HORN (R3)",
                     boundInput = "R3",
-                    xPercent = 0.62f,
-                    yPercent = 0.45f,
+                    xPercent = 0.923f,
+                    yPercent = 0.680f,
                     radiusDp = 36f,
                     opacity = 0.80f,
-                    colorHex = "#FFD54F"
+                    colorHex = "#CE93D8",
+                    situation = "CAR"
+                ),
+                MappingNode(
+                    id = "node_car_seat",
+                    nodeType = NodeType.VEHICLE_CHANGE_SEAT,
+                    label = "SEAT (X)",
+                    boundInput = "X",
+                    xPercent = 0.916f,
+                    yPercent = 0.910f,
+                    radiusDp = 34f,
+                    opacity = 0.80f,
+                    colorHex = "#80DEEA",
+                    situation = "CAR"
+                ),
+
+                // ==========================================
+                // 3. MOTORCYCLE / BIKE SITUATION (Screenshot 2)
+                // ==========================================
+                MappingNode(
+                    id = "node_bike_gas",
+                    nodeType = NodeType.VEHICLE_ACCEL,
+                    label = "GAS (RT / W)",
+                    boundInput = "RT",
+                    xPercent = 0.166f,
+                    yPercent = 0.535f,
+                    radiusDp = 46f,
+                    opacity = 0.85f,
+                    colorHex = "#00E676",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_rev",
+                    nodeType = NodeType.VEHICLE_REVERSE,
+                    label = "REV (LT / S)",
+                    boundInput = "LT",
+                    xPercent = 0.166f,
+                    yPercent = 0.765f,
+                    radiusDp = 46f,
+                    opacity = 0.85f,
+                    colorHex = "#FF5252",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_left",
+                    nodeType = NodeType.VEHICLE_STEER_LEFT,
+                    label = "LEFT (L-LEFT / A)",
+                    boundInput = "L-LEFT",
+                    xPercent = 0.704f,
+                    yPercent = 0.690f,
+                    radiusDp = 44f,
+                    opacity = 0.85f,
+                    colorHex = "#00E5FF",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_right",
+                    nodeType = NodeType.VEHICLE_STEER_RIGHT,
+                    label = "RIGHT (L-RIGHT / D)",
+                    boundInput = "L-RIGHT",
+                    xPercent = 0.835f,
+                    yPercent = 0.690f,
+                    radiusDp = 44f,
+                    opacity = 0.85f,
+                    colorHex = "#00E5FF",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_brake",
+                    nodeType = NodeType.VEHICLE_BRAKE,
+                    label = "BRAKE (B / SPACE)",
+                    boundInput = "B",
+                    xPercent = 0.088f,
+                    yPercent = 0.665f,
+                    radiusDp = 38f,
+                    opacity = 0.85f,
+                    colorHex = "#FF1744",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_lean_d",
+                    nodeType = NodeType.VEHICLE_LEAN_DOWN,
+                    label = "LEAN DOWN (LB / Q)",
+                    boundInput = "LB",
+                    xPercent = 0.738f,
+                    yPercent = 0.510f,
+                    radiusDp = 38f,
+                    opacity = 0.85f,
+                    colorHex = "#FFB300",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_lean_u",
+                    nodeType = NodeType.VEHICLE_LEAN_UP,
+                    label = "WHEELIE (RB / E)",
+                    boundInput = "RB",
+                    xPercent = 0.808f,
+                    yPercent = 0.510f,
+                    radiusDp = 38f,
+                    opacity = 0.85f,
+                    colorHex = "#FFB300",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_exit",
+                    nodeType = NodeType.VEHICLE_EXIT,
+                    label = "EXIT (Y / F)",
+                    boundInput = "Y",
+                    xPercent = 0.865f,
+                    yPercent = 0.450f,
+                    radiusDp = 40f,
+                    opacity = 0.90f,
+                    colorHex = "#FFD54F",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_horn",
+                    nodeType = NodeType.VEHICLE_HORN,
+                    label = "HORN (R3)",
+                    boundInput = "R3",
+                    xPercent = 0.923f,
+                    yPercent = 0.680f,
+                    radiusDp = 36f,
+                    opacity = 0.80f,
+                    colorHex = "#CE93D8",
+                    situation = "BIKE"
+                ),
+                MappingNode(
+                    id = "node_bike_seat",
+                    nodeType = NodeType.VEHICLE_CHANGE_SEAT,
+                    label = "SEAT (X)",
+                    boundInput = "X",
+                    xPercent = 0.916f,
+                    yPercent = 0.910f,
+                    radiusDp = 34f,
+                    opacity = 0.80f,
+                    colorHex = "#80DEEA",
+                    situation = "BIKE"
                 )
             )
         )

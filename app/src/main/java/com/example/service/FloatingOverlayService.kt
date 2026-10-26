@@ -80,6 +80,7 @@ import com.example.input.InputEventBus
 import com.example.model.HudBackgroundType
 import com.example.model.MappingNode
 import com.example.model.NodeType
+import com.example.model.PlayerSituation
 import com.example.model.Profile
 import com.example.ui.AddNodeMenu
 import com.example.ui.HudWorkspace
@@ -253,9 +254,17 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                 val isEditMode by isEditModeState
                 val opacity by opacityState
                 val profile = activeProfileState.value ?: profileRepository.getActiveProfile()
+                val currentSituation by profileRepository.currentSituation.collectAsState()
                 val pressedKeys by InputEventBus.pressedKeys.collectAsState()
                 val analogState by InputEventBus.analogState.collectAsState()
                 val showAddDialog by showAddNodeDialogState
+
+                // Filter nodes according to the player's situation (On-Foot vs Car vs Bike)
+                val filteredNodes = profile.nodes.filter {
+                    it.situation == "ALL" ||
+                            it.situation.equals(currentSituation.id, ignoreCase = true) ||
+                            it.situation.equals(currentSituation.name, ignoreCase = true)
+                }
 
                 Box(
                     modifier = Modifier
@@ -264,7 +273,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                 ) {
                     if (isVisible) {
                         HudWorkspace(
-                            nodes = profile.nodes.map { it.copy(opacity = opacity) },
+                            nodes = filteredNodes.map { it.copy(opacity = opacity) },
                             isEditMode = isEditMode,
                             selectedNode = mappingTargetNodeState.value,
                             pressedKeys = pressedKeys,
@@ -382,7 +391,8 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                                     xPercent = 0.5f,
                                     yPercent = 0.5f,
                                     radiusDp = if (type == NodeType.JOYSTICK_LEFT || type == NodeType.JOYSTICK_RIGHT) 60f else 38f,
-                                    colorHex = defaultColor
+                                    colorHex = defaultColor,
+                                    situation = currentSituation.id
                                 )
                                 val updated = current.copy(nodes = current.nodes + newNode)
                                 profileRepository.saveProfile(updated)
@@ -464,6 +474,43 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                             color = if (isEditMode) NeonAmber else NeonGreen,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // 1c. SITUATIONAL CONTROLS SWITCHER (Foot vs Car vs Bike)
+                    val currentSituation by profileRepository.currentSituation.collectAsState()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                when (currentSituation) {
+                                    PlayerSituation.FOOT -> Color(0xFF004D40)
+                                    PlayerSituation.VEHICLE_CAR -> Color(0xFFD84315)
+                                    PlayerSituation.VEHICLE_BIKE -> Color(0xFF6A1B9A)
+                                }
+                            )
+                            .border(
+                                1.5.dp,
+                                when (currentSituation) {
+                                    PlayerSituation.FOOT -> NeonGreen
+                                    PlayerSituation.VEHICLE_CAR -> NeonAmber
+                                    PlayerSituation.VEHICLE_BIKE -> Color(0xFFE040FB)
+                                },
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                val next = profileRepository.cycleSituation()
+                                mapSuccessToastState.value = "⚡ SWITCHED: ${next.chipLabel}"
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = currentSituation.chipLabel,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace
                         )
                     }
