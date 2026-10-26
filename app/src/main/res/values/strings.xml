@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Gamepad Mapper</string>
+    <string name="accessibility_service_description">Simulates gamepad and keyboard touch taps on screen while playing games like PUBG and BGMI.</string>
+</resources>

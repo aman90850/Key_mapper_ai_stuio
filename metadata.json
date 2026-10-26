@@ -1,0 +1,6 @@
+{
+  "name": "Gamepad Mapper",
+  "description": "Professional Mobile Gamepad & Keyboard Touch Mapper HUD with live hardware input detection, draggable mapping nodes, and customizable profiles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Gamepad Outer Body -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M38,36 C34,36 30,39 28,44 L24,56 C22,62 25,70 31,73 C36,75 42,72 45,67 L48,62 C50,60 58,60 60,62 L63,67 C66,72 72,75 77,73 C83,70 86,62 84,56 L80,44 C78,39 74,36 70,36 Z" />
+    <!-- Gamepad Inner Grip / Surface Dark Inset -->
+    <path
+        android:fillColor="#09101D"
+        android:pathData="M39,38 C36,38 32,41 30,46 L26.5,57 C25,61.5 27.5,67 32,69.5 C35.5,71.5 40,69 42.5,65 L45.5,60 C48.5,55 59.5,55 62.5,60 L65.5,65 C68,69 72.5,71.5 76,69.5 C80.5,67 83,61.5 81.5,57 L78,46 C76,41 72,38 69,38 Z" />
+    <!-- D-Pad Left -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M36,46h4v3h3v4h-3v3h-4v-3h-3v-4h3z" />
+    <!-- Action Buttons Right (X, Y, A, B) -->
+    <!-- Top Button Y -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M69,45a2,2 0 1,0 4,0a2,2 0 1,0 -4,0" />
+    <!-- Right Button B -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M74,50a2,2 0 1,0 4,0a2,2 0 1,0 -4,0" />
+    <!-- Bottom Button A -->
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M69,55a2,2 0 1,0 4,0a2,2 0 1,0 -4,0" />
+    <!-- Left Button X -->
+    <path
+        android:fillColor="#448AFF"
+        android:pathData="M64,50a2,2 0 1,0 4,0a2,2 0 1,0 -4,0" />
+    <!-- Center Touch Mapping Reticle / Crosshair Indicator -->
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="1.5"
+        android:pathData="M54,41v4 M54,51v4 M49,46h4 M59,46h4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="1.2"
+        android:pathData="M54,46m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+</vector>
